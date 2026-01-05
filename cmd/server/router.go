@@ -7,7 +7,7 @@ import (
 
 func NewRouter(handler *coupon.Handler) http.Handler {
 	root := http.NewServeMux()
-	root.Handle("/api/", handler.Routes())
+	root.Handle("/", handler.Routes())
 
 	return root
 }

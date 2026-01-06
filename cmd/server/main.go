@@ -11,9 +11,15 @@ import (
 	"scalable-coupon-system/internal/shared"
 	"syscall"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Error("failed to load environment variables", "err", err)
+	}
+
 	cfg := shared.NewConfig()
 
 	log, closeLog, err := shared.NewLogger(*cfg)

@@ -21,11 +21,6 @@ func NewService(repo *Repository,
 	}
 }
 
-var ErrCouponAlreadyExists = errors.New("coupon already exists")
-var ErrCouponNotFound = errors.New("coupon not found")
-var ErrCouponAlreadyClaimed = errors.New("coupon already claimed")
-var ErrCouponNoStock = errors.New("coupon no stock")
-
 func (s *Service) CreateCoupon(
 	ctx context.Context,
 	request CreateCouponRequest,
@@ -49,6 +44,27 @@ func (s *Service) CreateCoupon(
 	}
 
 	return nil
+}
+
+func (s *Service) ClaimCoupon(
+	ctx context.Context,
+	req ClaimCouponRequest,
+) error {
+	err := s.repo.ClaimCoupon(ctx, req)
+	if err == nil {
+		return nil
+	}
+
+	switch {
+	case errors.Is(err, ErrCouponNotFound):
+		return ErrCouponNotFound
+	case errors.Is(err, ErrCouponOutOfStock):
+		return ErrCouponOutOfStock
+	case errors.Is(err, ErrCouponAlreadyClaimed):
+		return ErrCouponAlreadyClaimed
+	default:
+		return err
+	}
 }
 
 func (s *Service) GetCouponDetails(

@@ -65,7 +65,23 @@ func (h *Handler) ClaimCoupon(
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	err := h.service.ClaimCoupon(r.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrCouponAlreadyClaimed):
+		case errors.Is(err, ErrCouponOutOfStock):
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		case errors.Is(err, ErrCouponNotFound):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusCreated)
 }
 
 func (h *Handler) GetCouponDetails(

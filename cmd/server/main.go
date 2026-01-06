@@ -16,9 +16,7 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Error("failed to load environment variables", "err", err)
-	}
+	_ = godotenv.Load()
 
 	cfg := shared.NewConfig()
 

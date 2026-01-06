@@ -11,9 +11,13 @@ import (
 	"scalable-coupon-system/internal/shared"
 	"syscall"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	cfg := shared.NewConfig()
 
 	log, closeLog, err := shared.NewLogger(*cfg)

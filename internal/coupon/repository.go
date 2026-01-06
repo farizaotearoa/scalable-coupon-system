@@ -3,18 +3,21 @@ package coupon
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db  *pgxpool.Pool
+	log *slog.Logger
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository {
+func NewRepository(db *pgxpool.Pool, log *slog.Logger) *Repository {
 	return &Repository{
-		db: db,
+		db:  db,
+		log: log,
 	}
 }
 
@@ -29,6 +32,9 @@ func (r *Repository) CheckCouponExist(
 	ctx context.Context,
 	couponName string,
 ) (bool, error) {
+	r.log.Info("checking coupon existence", "coupon_name", couponName)
+	defer r.log.Info("finished checking coupon existence", "coupon_name", couponName)
+
 	var count int
 	query := `
 		SELECT COUNT(1)
@@ -37,30 +43,46 @@ func (r *Repository) CheckCouponExist(
 
 	err := r.db.QueryRow(ctx, query, couponName).Scan(&count)
 	if err != nil {
+		r.log.Error("failed to check coupon existence", "coupon_name", couponName, "error", err)
 		return false, err
 	}
 
-	return count > 0, nil
+	exists := count > 0
+	r.log.Info("coupon existence checked", "coupon_name", couponName, "exists", exists)
+	return exists, nil
 }
 
 func (r *Repository) InsertCoupon(
 	ctx context.Context,
 	coupon Coupons,
 ) error {
+	r.log.Info("inserting coupon", "coupon_name", coupon.Name, "amount", coupon.Amount)
+	defer r.log.Info("finished inserting coupon", "coupon_name", coupon.Name)
+
 	query := `
 		INSERT INTO coupons (name, amount) 
 		VALUES ($1, $2)
 	`
 	_, err := r.db.Exec(ctx, query, coupon.Name, coupon.Amount)
-	return err
+	if err != nil {
+		r.log.Error("failed to insert coupon", "coupon_name", coupon.Name, "error", err)
+		return err
+	}
+
+	r.log.Info("coupon inserted successfully", "coupon_name", coupon.Name)
+	return nil
 }
 
 func (r *Repository) ClaimCoupon(
 	ctx context.Context,
 	req ClaimCouponRequest,
 ) error {
+	r.log.Info("starting coupon claim", "coupon_name", req.CouponName, "user_id", req.UserId)
+	defer r.log.Info("finished coupon claim", "coupon_name", req.CouponName, "user_id", req.UserId)
+
 	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
+		r.log.Error("failed to begin transaction", "coupon_name", req.CouponName, "user_id", req.UserId, "error", err)
 		return err
 	}
 	defer tx.Rollback(ctx)
@@ -74,9 +96,11 @@ func (r *Repository) ClaimCoupon(
 		)
 	`, req.CouponName, req.UserId).Scan(&alreadyClaimed)
 	if err != nil {
+		r.log.Error("failed to check claim history", "coupon_name", req.CouponName, "user_id", req.UserId, "error", err)
 		return err
 	}
 	if alreadyClaimed {
+		r.log.Warn("coupon already claimed", "coupon_name", req.CouponName, "user_id", req.UserId)
 		return ErrCouponAlreadyClaimed
 	}
 
@@ -93,12 +117,15 @@ func (r *Repository) ClaimCoupon(
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			r.log.Warn("coupon not found", "coupon_name", req.CouponName)
 			return ErrCouponNotFound
 		}
+		r.log.Error("failed to check stock", "coupon_name", req.CouponName, "error", err)
 		return err
 	}
 
 	if amount-used <= 0 {
+		r.log.Warn("coupon out of stock", "coupon_name", req.CouponName, "amount", amount, "used", used)
 		return ErrCouponOutOfStock
 	}
 
@@ -108,16 +135,27 @@ func (r *Repository) ClaimCoupon(
 	`, req.CouponName, req.UserId)
 
 	if err != nil {
+		r.log.Error("failed to insert claim", "coupon_name", req.CouponName, "user_id", req.UserId, "error", err)
 		return err
 	}
 
-	return tx.Commit(ctx)
+	err = tx.Commit(ctx)
+	if err != nil {
+		r.log.Error("failed to commit transaction", "coupon_name", req.CouponName, "user_id", req.UserId, "error", err)
+		return err
+	}
+
+	r.log.Info("coupon claimed successfully", "coupon_name", req.CouponName, "user_id", req.UserId)
+	return nil
 }
 
 func (r *Repository) GetCouponDetails(
 	ctx context.Context,
 	couponName string,
 ) (*Details, error) {
+	r.log.Info("getting coupon details", "coupon_name", couponName)
+	defer r.log.Info("finished getting coupon details", "coupon_name", couponName)
+
 	query := `
 		SELECT
 			c.name,
@@ -143,9 +181,11 @@ func (r *Repository) GetCouponDetails(
 	)
 
 	if err != nil {
+		r.log.Error("failed to get coupon details", "coupon_name", couponName, "error", err)
 		return nil, err
 	}
 
+	r.log.Info("coupon details retrieved", "coupon_name", couponName, "remaining", resp.RemainingAmount)
 	return &resp, nil
 
 }

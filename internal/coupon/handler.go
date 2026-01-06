@@ -18,7 +18,7 @@ type Handler struct {
 func NewHandler(db *pgxpool.Pool,
 	log *slog.Logger,
 ) *Handler {
-	repo := NewRepository(db)
+	repo := NewRepository(db, log)
 	svc := NewService(repo, log)
 	return &Handler{
 		service: svc,
@@ -30,10 +30,14 @@ func (h *Handler) CreateCoupon(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	h.log.Info("create coupon request received")
+	defer h.log.Info("create coupon request completed")
+
 	var req CreateCouponRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
+		h.log.Warn("failed to decode request", "error", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -57,10 +61,14 @@ func (h *Handler) ClaimCoupon(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	h.log.Info("claim coupon request received")
+	defer h.log.Info("claim coupon request completed")
+
 	var req ClaimCouponRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
+		h.log.Warn("failed to decode request", "error", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -69,6 +77,8 @@ func (h *Handler) ClaimCoupon(
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrCouponAlreadyClaimed):
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
 		case errors.Is(err, ErrCouponOutOfStock):
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
@@ -88,8 +98,12 @@ func (h *Handler) GetCouponDetails(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	h.log.Info("get coupon details request received")
+	defer h.log.Info("get coupon details request completed")
+
 	name := r.PathValue("name")
 	if name == "" {
+		h.log.Warn("coupon name missing in request")
 		http.Error(w, "coupon name required", http.StatusBadRequest)
 		return
 	}
